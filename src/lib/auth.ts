@@ -21,8 +21,16 @@ export function generateToken(user: { id: string; email: string; name: string; r
 
 export function verifyToken(token: string): AuthUser | null {
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as AuthUser
-    return decoded
+    const decoded = jwt.verify(token, JWT_SECRET)
+    // Handle both object and string payload (for backwards compatibility)
+    if (typeof decoded === 'string' || !decoded || typeof decoded !== 'object') {
+      return null // Old invalid token format
+    }
+    const user = decoded as Record<string, unknown>
+    if (!user.id || typeof user.id !== 'string') {
+      return null // Invalid token structure
+    }
+    return user as AuthUser
   } catch {
     return null
   }
