@@ -39,7 +39,7 @@ import type {
 import { api, getInitials } from '@/lib/api'
 import { getStatusBadge, getExpertiseBadge } from '@/lib/utils'
 
-const VERSION = 'v1.11.0'
+const VERSION = 'v1.11.2'
 
 export default function ProjectBureauApp() {
   // Auth & Global State
