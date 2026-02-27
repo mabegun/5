@@ -1,0 +1,473 @@
+// Prisma схема для "Проектное Бюро"
+// PostgreSQL база данных
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// ПОЛЬЗОВАТЕЛИ
+// ============================================
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  password      String
+  name          String
+  position      String?
+  phone         String?
+  avatar        String?
+  avatarColor   String?  @default("#3B82F6")
+  role          String   @default("employee") // admin, gip, employee, accountant
+  competencies  String[] // Массив компетенций
+  
+  // Метаданные
+  isArchived    Boolean  @default(false)
+  archiveReason String?
+  
+  // Служебные поля
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  // Связи
+  projectsAsGip      Project[]           @relation("ProjectGip")
+  assignedSections   Section[]           @relation("SectionAssignee")
+  assignedTasks      Task[]              @relation("TaskAssignee")
+  authoredTasks      Task[]              @relation("TaskAuthor")
+  messages           Message[]           @relation("MessageAuthor")
+  notifications      Notification[]      @relation("NotificationUser")
+  sessions           Session[]
+
+  @@map("users")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  userId       String
+  token        String   @unique
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("sessions")
+}
+
+// ============================================
+// ПРОЕКТЫ
+// ============================================
+
+model Project {
+  id                  String   @id @default(cuid())
+  name                String
+  code                String?  // Шифр проекта
+  address             String?
+  description         String?
+  type                String   @default("construction") // construction, reconstruction, design
+  deadline            String?
+  customerContact     String?  // Контакт заказчика
+  customerPhone       String?
+  status              String   @default("in_work") // draft, in_work, completed, archived
+  expertise           String   @default("none") // none, state, non_state
+  
+  // ГИП
+  gipId               String?
+  gip                 User?    @relation("ProjectGip", fields: [gipId], references: [id], onDelete: SetNull)
+  
+  // Архивация
+  archivedAt          String?
+  archiveReason       String?
+  
+  // Файлы
+  positiveConclusionFile String?
+  positiveConclusionName String?
+  
+  // Служебные поля
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  
+  // Связи
+  sections            Section[]
+  investigations      Investigation[]
+  expertises          Expertise[]
+  contacts            Contact[]
+  introBlocks         IntroBlock[]
+  tasks               Task[]
+  messages            Message[]
+  
+  @@map("projects")
+}
+
+// ============================================
+// РАЗДЕЛЫ ПРОЕКТА
+// ============================================
+
+model Section {
+  id                  String   @id @default(cuid())
+  projectId           String
+  code                String   // Шифр раздела (ГП, АР, КР, и т.д.)
+  description         String?
+  status              String   @default("not_started") // not_started, in_progress, completed
+  expertiseStatus     String?  // pending, approved, rejected
+  
+  // Исполнитель (основной)
+  assigneeId          String?
+  assignee            User?    @relation("SectionAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  
+  // Соисполнители
+  coAssignees         Json?    // Массив ID соисполнителей
+  
+  // Даты
+  startedAt           String?
+  completedAt         String?
+  
+  // Файлы
+  files               Json?    // Массив файлов
+  completedFile       String?
+  completedFileName   String?
+  
+  // Служебные поля
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  
+  // Связи
+  project             Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  introBlocks         IntroBlock[]
+  messages            Message[]
+  remarks             ExpertiseRemark[]
+  
+  @@map("sections")
+}
+
+// ============================================
+// ИЗЫСКАНИЯ
+// ============================================
+
+model Investigation {
+  id                  String   @id @default(cuid())
+  projectId           String
+  
+  // Связь со стандартным изысканием или кастомное
+  standardId          String?  // ID стандартного изыскания
+  customName          String?  // Название для кастомного
+  isCustom            Boolean  @default(false)
+  
+  status              String   @default("not_started") // not_started, in_progress, completed
+  
+  // Подрядчик
+  contractorName      String?
+  contractorContact   String?
+  contractorPhone     String?
+  contractorEmail     String?
+  
+  // Договор
+  contractNumber      String?
+  contractDate        String?
+  contractFile        String?
+  contractFileName    String?
+  
+  // Результаты
+  resultFile          String?
+  resultFileName      String?
+  
+  // Даты
+  startDate           String?
+  endDate             String?
+  description         String?
+  
+  // Служебные поля
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  
+  // Связи
+  project             Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  @@map("investigations")
+}
+
+// Стандартные изыскания (справочник)
+model StandardInvestigation {
+  id                  String   @id @default(cuid())
+  name                String
+  description         String?
+  sortOrder           Int      @default(0)
+  isActive            Boolean  @default(true)
+  
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  
+  @@map("standard_investigations")
+}
+
+// ============================================
+// ЭКСПЕРТИЗА
+// ============================================
+
+model Expertise {
+  id                  String   @id @default(cuid())
+  projectId           String
+  
+  stageId             String?  // ID этапа экспертизы
+  stageName           String?
+  
+  // Эксперты (может быть несколько)
+  experts             Json?    // Массив экспертов: [{name, phone, email, organization}]
+  
+  // Даты
+  startDate           String?
+  endDate             String?
+  
+  // Файлы экспертизы
+  files               Json?    // Массив файлов отправленных на экспертизу
+  
+  // Служебные поля
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  
+  // Связи
+  project             Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  remarks             ExpertiseRemark[]
+  
+  @@map("expertises")
+}
+
+model ExpertiseRemark {
+  id                  String   @id @default(cuid())
+  expertiseId         String
+  sectionId           String?  // Привязка к разделу
+  sectionCode         String?
+  number              String?  // Номер замечания
+  content             String   // Текст замечания
+  
+  // Файл замечания
+  fileName            String?
+  filePath            String?
+  
+  // Ответ на замечание
+  responseContent     String?  // Текст ответа
+  responseFile        String?  // Файл ответа
+  responseFileName    String?
+  respondedAt         String?
+  respondedBy         String?  // ID пользователя
+  
+  // Статус
+  status              String   @default("open") // open, responded, closed
+  
+  // Служебные поля
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  
+  // Связи
+  expertise           Expertise @relation(fields: [expertiseId], references: [id], onDelete: Cascade)
+  section             Section? @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+  comments            RemarkComment[]
+  
+  @@map("expertise_remarks")
+}
+
+// Комментарии к замечаниям
+model RemarkComment {
+  id                  String   @id @default(cuid())
+  remarkId            String
+  content             String
+  
+  // Автор
+  authorId            String
+  
+  // Файл
+  fileName            String?
+  filePath            String?
+  
+  // Служебные поля
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  
+  // Связи
+  remark              ExpertiseRemark @relation(fields: [remarkId], references: [id], onDelete: Cascade)
+  
+  @@map("remark_comments")
+}
+
+// Этапы экспертизы (справочник)
+model ExpertiseStage {
+  id                  String   @id @default(cuid())
+  name                String
+  description         String?
+  sortOrder           Int      @default(0)
+  isActive            Boolean  @default(true)
+  
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  
+  @@map("expertise_stages")
+}
+
+// ============================================
+// КОНТАКТЫ
+// ============================================
+
+model Contact {
+  id                  String   @id @default(cuid())
+  projectId           String
+  name                String
+  position            String?
+  company             String?
+  phone               String?
+  email               String?
+  notes               String?
+  
+  // Служебные поля
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  
+  // Связи
+  project             Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  @@map("contacts")
+}
+
+// ============================================
+// ВОДНАЯ ИНФОРМАЦИЯ
+// ============================================
+
+model IntroBlock {
+  id                  String   @id @default(cuid())
+  projectId           String?
+  sectionId           String?
+  
+  type                String   @default("text") // text, file, image
+  title               String
+  content             String?
+  
+  // Файл
+  fileName            String?
+  filePath            String?
+  
+  // Порядок
+  sortOrder           Int      @default(0)
+  
+  // Служебные поля
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  
+  // Связи
+  project             Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  section             Section? @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  
+  @@map("intro_blocks")
+}
+
+// ============================================
+// ЗАДАЧИ
+// ============================================
+
+model Task {
+  id                  String   @id @default(cuid())
+  projectId           String?
+  title               String
+  description         String?
+  
+  // Исполнитель
+  assigneeId          String?
+  assignee            User?    @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  
+  // Автор
+  authorId            String
+  author              User     @relation("TaskAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  
+  // Параметры
+  deadline            String?
+  priority            String   @default("medium") // low, medium, high
+  status              String   @default("not_started") // not_started, in_progress, completed
+  
+  // Служебные поля
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  
+  // Связи
+  project             Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  
+  @@map("tasks")
+}
+
+// ============================================
+// СООБЩЕНИЯ
+// ============================================
+
+model Message {
+  id                  String   @id @default(cuid())
+  projectId           String?
+  sectionId           String?  // Связь с разделом
+  content             String
+  
+  // Автор
+  authorId            String
+  author              User     @relation("MessageAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  
+  // Параметры
+  isCritical          Boolean  @default(false)
+  isResolved          Boolean  @default(false)
+  parentId            String?
+  
+  // Файл
+  fileName            String?
+  filePath            String?
+  
+  // Служебные поля
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  
+  // Связи
+  project             Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  section             Section? @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  
+  @@map("messages")
+}
+
+// ============================================
+// УВЕДОМЛЕНИЯ
+// ============================================
+
+model Notification {
+  id                  String   @id @default(cuid())
+  userId              String
+  type                String   // project, section, task, message, system
+  message             String
+  link                String?
+  isRead              Boolean  @default(false)
+  
+  // Служебные поля
+  createdAt           DateTime @default(now())
+  
+  // Связи
+  user                User     @relation("NotificationUser", fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("notifications")
+}
+
+// ============================================
+// ФАЙЛЫ
+// ============================================
+
+model File {
+  id                  String   @id @default(cuid())
+  name                String
+  originalName        String
+  path                String
+  mimeType            String
+  size                Int
+  
+  // Связь (опционально)
+  projectId           String?
+  sectionId           String?
+  
+  // Служебные поля
+  createdAt           DateTime @default(now())
+  
+  @@map("files")
+}
