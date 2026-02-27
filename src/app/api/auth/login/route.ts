@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Генерируем токен
-    const token = generateToken(user.id)
+    const token = generateToken(user)
 
     // Создаем response с cookie
     const response = NextResponse.json({

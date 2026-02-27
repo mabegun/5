@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
     })
 
     // Генерируем токен
-    const token = generateToken(user.id)
+    const token = generateToken(user)
 
     const response = NextResponse.json({
       success: true,
